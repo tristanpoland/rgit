@@ -1,17 +1,11 @@
 use anyhow::Result;
 use colored::*;
+use colored::{Color, Colorize}; // Add this line for color constants
 use dialoguer::{
-    theme::ColorfulTheme, 
-    Confirm, 
-    Input, 
-    Select, 
-    MultiSelect, 
-    FuzzySelect, 
-    Editor,
-    Password,
+    theme::ColorfulTheme, Confirm, Editor, FuzzySelect, Input, MultiSelect, Password, Select,
 };
-use std::path::PathBuf;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use crate::error::RgitError;
 
@@ -79,23 +73,26 @@ impl InteractivePrompt {
     /// Show a selection prompt
     pub fn select(&self) -> Result<usize> {
         if self.options.is_empty() {
-            return Err(RgitError::InvalidArgument("No options provided for selection".to_string()).into());
+            return Err(RgitError::InvalidArgument(
+                "No options provided for selection".to_string(),
+            )
+            .into());
         }
 
         let result = if self.fuzzy {
-            let mut select = FuzzySelect::with_theme(&self.theme);
-            select.with_prompt(&self.message);
-            select.items(&self.options);
+            let mut select = FuzzySelect::with_theme(&self.theme)
+                .with_prompt(&self.message)
+                .items(&self.options);
             if let Some(default) = self.default {
-                select.default(default);
+                select = select.default(default);
             }
             select.interact()?
         } else {
-            let mut select = Select::with_theme(&self.theme);
-            select.with_prompt(&self.message);
-            select.items(&self.options);
+            let mut select = Select::with_theme(&self.theme)
+                .with_prompt(&self.message)
+                .items(&self.options);
             if let Some(default) = self.default {
-                select.default(default);
+                select = select.default(default);
             }
             select.interact()?
         };
@@ -106,7 +103,10 @@ impl InteractivePrompt {
     /// Show a multiselect prompt
     pub fn multiselect_prompt(&self) -> Result<Vec<usize>> {
         if self.options.is_empty() {
-            return Err(RgitError::InvalidArgument("No options provided for multiselect".to_string()).into());
+            return Err(RgitError::InvalidArgument(
+                "No options provided for multiselect".to_string(),
+            )
+            .into());
         }
 
         let multiselect = MultiSelect::with_theme(&self.theme)
@@ -119,13 +119,13 @@ impl InteractivePrompt {
     /// Show a text input prompt
     pub fn input<T>(&self) -> Result<T>
     where
-        T: std::str::FromStr + Clone,
+        T: std::str::FromStr + ToString + Clone,
         T::Err: std::fmt::Display + std::fmt::Debug + Send + Sync + 'static,
     {
         let mut input = Input::with_theme(&self.theme);
-        input.with_prompt(&self.message);
-        input.allow_empty(self.allow_empty);
-        
+        input = input.with_prompt(&self.message);
+        input = input.allow_empty(self.allow_empty);
+
         Ok(input.interact_text()?)
     }
 
@@ -140,8 +140,7 @@ impl InteractivePrompt {
 
     /// Show a password input prompt
     pub fn password(&self) -> Result<String> {
-        let password = Password::with_theme(&self.theme)
-            .with_prompt(&self.message);
+        let password = Password::with_theme(&self.theme).with_prompt(&self.message);
 
         Ok(password.interact()?)
     }
@@ -149,7 +148,7 @@ impl InteractivePrompt {
     /// Open an editor for text input
     pub fn editor(&self) -> Result<String> {
         let editor = Editor::new();
-        
+
         match editor.edit(&self.message)? {
             Some(text) => Ok(text.trim().to_string()),
             None => Err(RgitError::OperationCancelled.into()),
@@ -162,9 +161,15 @@ impl InteractivePrompt {
             defaults_style: console::Style::new().for_stderr().cyan(),
             prompt_style: console::Style::new().for_stderr().bold(),
             prompt_prefix: console::style("?".to_string()).for_stderr().yellow(),
-            prompt_suffix: console::style("›".to_string()).for_stderr().black().bright(),
+            prompt_suffix: console::style("›".to_string())
+                .for_stderr()
+                .black()
+                .bright(),
             success_prefix: console::style("✓".to_string()).for_stderr().green(),
-            success_suffix: console::style("·".to_string()).for_stderr().black().bright(),
+            success_suffix: console::style("·".to_string())
+                .for_stderr()
+                .black()
+                .bright(),
             error_prefix: console::style("✗".to_string()).for_stderr().red(),
             error_style: console::Style::new().for_stderr().red(),
             hint_style: console::Style::new().for_stderr().black().bright(),
@@ -177,6 +182,8 @@ impl InteractivePrompt {
             unchecked_item_prefix: console::style("✗".to_string()).for_stderr().red(),
             picked_item_prefix: console::style("❯".to_string()).for_stderr().green(),
             unpicked_item_prefix: console::style(" ".to_string()).for_stderr(),
+            fuzzy_cursor_style: console::Style::new().for_stderr().yellow().bold(),
+            fuzzy_match_highlight_style: console::Style::new().for_stderr().bold(),
         }
     }
 }
@@ -229,40 +236,45 @@ impl FileSelector {
         }
 
         let items = self.format_file_items();
-        
+
         let selected_indices = InteractivePrompt::new()
             .with_message("Select files to stage")
             .with_options(&items)
             .multiselect_prompt()?;
 
-        Ok(selected_indices.into_iter()
+        Ok(selected_indices
+            .into_iter()
             .map(|i| self.files[i].path.clone())
             .collect())
     }
 
     /// Format file items for display
     fn format_file_items(&self) -> Vec<String> {
-        self.files.iter().map(|item| {
-            let status_color = match item.status.as_str() {
-                "modified" => Yellow,
-                "new" => Green,
-                "deleted" => Red,
-                _ => White,
-            };
+        self.files
+            .iter()
+            .map(|item| {
+                let status_color = match item.status.as_str() {
+                    "modified" => Color::Yellow,
+                    "new" => Color::Green,
+                    "deleted" => Color::Red,
+                    _ => Color::White,
+                };
 
-            let mut display = format!("{} {}", 
-                item.status.color(status_color).bold(),
-                item.path.display().to_string().white()
-            );
+                let mut display = format!(
+                    "{} {}",
+                    item.status.color(status_color).bold(),
+                    item.path.display().to_string().white()
+                );
 
-            if self.show_details {
-                if let Some(size) = item.size {
-                    display.push_str(&format!(" {}", format_size(size).dimmed()));
+                if self.show_details {
+                    if let Some(size) = item.size {
+                        display.push_str(&format!(" {}", format_size(size).dimmed()));
+                    }
                 }
-            }
 
-            display
-        }).collect()
+                display
+            })
+            .collect()
     }
 }
 
@@ -310,13 +322,14 @@ impl CommitMessageEditor {
     /// Edit commit message
     pub fn edit(&self) -> Result<String> {
         let initial_content = self.build_initial_content();
-        
+
         let editor = Editor::new();
-        let result = editor.edit(&initial_content)?
+        let result = editor
+            .edit(&initial_content)?
             .ok_or(RgitError::OperationCancelled)?;
 
         let message = self.parse_commit_message(&result)?;
-        
+
         if self.validate {
             self.validate_message(&message)?;
         }
@@ -356,7 +369,7 @@ impl CommitMessageEditor {
             .collect();
 
         let message = lines.join("\n").trim().to_string();
-        
+
         if message.is_empty() {
             return Err(RgitError::EmptyCommitMessage.into());
         }
@@ -367,19 +380,25 @@ impl CommitMessageEditor {
     /// Validate commit message
     fn validate_message(&self, message: &str) -> Result<()> {
         let lines: Vec<&str> = message.lines().collect();
-        
+
         if lines.is_empty() {
             return Err(RgitError::EmptyCommitMessage.into());
         }
 
         // Check first line length
         if lines[0].len() > 72 {
-            eprintln!("{} First line should be 72 characters or less", "⚠️".yellow());
+            eprintln!(
+                "{} First line should be 72 characters or less",
+                "⚠️".yellow()
+            );
         }
 
         // Check for blank line after first line if there are more lines
         if lines.len() > 1 && !lines[1].is_empty() {
-            eprintln!("{} Consider adding a blank line after the first line", "💡".blue());
+            eprintln!(
+                "{} Consider adding a blank line after the first line",
+                "💡".blue()
+            );
         }
 
         Ok(())
@@ -425,16 +444,16 @@ impl ConflictResolver {
             return Ok(());
         }
 
-        println!("{} {} conflicts detected", 
-                "⚔️".red(), 
-                self.conflicts.len());
+        println!("{} {} conflicts detected", "⚔️".red(), self.conflicts.len());
 
         for (i, conflict) in self.conflicts.iter().enumerate() {
-            println!("\n{} Conflict {} of {}: {}", 
-                    "📁".blue(),
-                    i + 1, 
-                    self.conflicts.len(),
-                    conflict.path.display().to_string().yellow());
+            println!(
+                "\n{} Conflict {} of {}: {}",
+                "📁".blue(),
+                i + 1,
+                self.conflicts.len(),
+                conflict.path.display().to_string().yellow()
+            );
 
             self.resolve_single_conflict(conflict)?;
         }
@@ -468,7 +487,7 @@ impl ConflictResolver {
             ],
             ConflictType::ModifyDelete => vec![
                 "Keep modified file",
-                "Keep deleted (remove file)", 
+                "Keep deleted (remove file)",
                 "Edit manually",
                 "Skip this file",
             ],
@@ -519,10 +538,8 @@ impl ConflictResolver {
     /// Open file in editor
     fn open_editor(&self, path: &PathBuf) -> Result<()> {
         let editor = std::env::var("EDITOR").unwrap_or_else(|_| "nano".to_string());
-        
-        std::process::Command::new(editor)
-            .arg(path)
-            .status()?;
+
+        std::process::Command::new(editor).arg(path).status()?;
 
         Ok(())
     }
@@ -530,10 +547,8 @@ impl ConflictResolver {
     /// Open merge tool
     fn open_merge_tool(&self, path: &PathBuf) -> Result<()> {
         let merge_tool = std::env::var("MERGE_TOOL").unwrap_or_else(|_| "vimdiff".to_string());
-        
-        std::process::Command::new(merge_tool)
-            .arg(path)
-            .status()?;
+
+        std::process::Command::new(merge_tool).arg(path).status()?;
 
         Ok(())
     }
@@ -685,7 +700,7 @@ impl TableDisplay {
         all_rows.extend(self.rows.clone());
 
         let col_widths = self.calculate_column_widths(&all_rows);
-        
+
         // Print header
         if !self.headers.is_empty() {
             self.print_row(&self.headers, &col_widths, true);
@@ -727,7 +742,8 @@ impl TableDisplay {
     }
 
     fn print_row(&self, row: &[String], widths: &[usize], is_header: bool) {
-        let formatted_cells: Vec<String> = row.iter()
+        let formatted_cells: Vec<String> = row
+            .iter()
             .zip(widths.iter())
             .map(|(cell, &width)| {
                 let truncated = if cell.len() > width {
@@ -735,7 +751,7 @@ impl TableDisplay {
                 } else {
                     cell.clone()
                 };
-                
+
                 if is_header {
                     format!("{:<width$}", truncated.bold(), width = width)
                 } else {
@@ -748,9 +764,7 @@ impl TableDisplay {
     }
 
     fn print_separator(&self, widths: &[usize]) {
-        let separators: Vec<String> = widths.iter()
-            .map(|&width| "-".repeat(width))
-            .collect();
+        let separators: Vec<String> = widths.iter().map(|&width| "-".repeat(width)).collect();
         println!("{}", separators.join("-|-"));
     }
 }
@@ -788,18 +802,14 @@ mod tests {
 
     #[test]
     fn test_file_selector_creation() {
-        let files = vec![
-            FileItem {
-                path: PathBuf::from("test.txt"),
-                status: "modified".to_string(),
-                size: Some(1024),
-                selected: false,
-            }
-        ];
+        let files = vec![FileItem {
+            path: PathBuf::from("test.txt"),
+            status: "modified".to_string(),
+            size: Some(1024),
+            selected: false,
+        }];
 
-        let selector = FileSelector::new()
-            .with_files(files)
-            .with_details();
+        let selector = FileSelector::new().with_files(files).with_details();
 
         assert_eq!(selector.files.len(), 1);
         assert!(selector.show_details);

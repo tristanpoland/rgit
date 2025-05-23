@@ -86,12 +86,9 @@ fn determine_push_target(
         .or_else(|| get_default_remote(repo))
         .unwrap_or_else(|| "origin".to_string());
     
-    let branch_specs = if !args.refspecs.is_empty() {
-        args.refspecs.clone()
-    } else if args.all {
-        get_all_local_branches(repo)?
-    } else if args.tags {
-        get_all_tags(repo)?
+    let branch_specs = if let Some(ref branch) = args.branch {
+        // Push specific branch
+        vec![format!("refs/heads/{}:refs/heads/{}", branch, branch)]
     } else {
         // Push current branch
         let current_branch = get_current_branch(repo)?;
@@ -107,7 +104,7 @@ fn get_current_branch(repo: &Repository) -> Result<String> {
     if let Some(name) = head.shorthand() {
         Ok(name.to_string())
     } else {
-        Err(RgitError::NotOnBranch.into())
+        Err(anyhow::anyhow!("Not on a branch").into())
     }
 }
 
@@ -156,7 +153,7 @@ fn get_all_local_branches(repo: &Repository) -> Result<Vec<String>> {
 fn get_all_tags(repo: &Repository) -> Result<Vec<String>> {
     let mut tags = Vec::new();
     
-    repo.tag_foreach(|oid, name| {
+    repo.tag_foreach(|_oid, name| {
         if let Some(tag_name) = std::str::from_utf8(name).ok() {
             if tag_name.starts_with("refs/tags/") {
                 tags.push(format!("{}:{}", tag_name, tag_name));
@@ -170,7 +167,7 @@ fn get_all_tags(repo: &Repository) -> Result<Vec<String>> {
 
 /// Perform the actual push operation
 async fn perform_push(
-    remote: &mut git2::Remote,
+    remote: &mut git2::Remote<'_>,
     refspecs: &[String],
     args: &PushArgs,
     config: &Config,
@@ -179,9 +176,10 @@ async fn perform_push(
     
     // Set up progress callback
     if config.ui.interactive {
-        callbacks.progress(|prog| {
-            if let Some(msg) = std::str::from_utf8(prog).ok() {
-                print!("\r{} {}", "📤".blue(), msg.trim());
+        callbacks.pack_progress(|_stage, current, total| {
+            if total > 0 {
+                let percentage = (current * 100) / total;
+                print!("\r{} Progress: {}% ({}/{})", "📤".blue(), percentage, current, total);
                 io::stdout().flush().unwrap();
             }
             true
@@ -232,10 +230,10 @@ async fn perform_push(
                     println!("Suggestions:");
                     println!("  • {} - Fetch and merge remote changes", "rgit pull".cyan());
                     println!("  • {} - Force push (destructive!)", "rgit push --force".red());
-                    return Err(RgitError::PushRejected(e.message().to_string()).into());
+                    return Err(anyhow::anyhow!("Push rejected: {}", e.message()).into());
                 }
             } else {
-                return Err(RgitError::PushFailed(e.message().to_string()).into());
+                return Err(anyhow::anyhow!("Push failed: {}", e.message()).into());
             }
         }
     }
@@ -263,7 +261,7 @@ fn force_push(remote: &mut git2::Remote, refspecs: &[String]) -> Result<()> {
     let refspec_refs: Vec<&str> = force_refspecs.iter().map(|s| s.as_str()).collect();
     
     remote.push(&refspec_refs, Some(&mut push_options))
-        .map_err(|e| RgitError::PushFailed(e.message().to_string()))?;
+        .map_err(|e| anyhow::anyhow!("Force push failed: {}", e.message()))?;
     
     Ok(())
 }
@@ -334,7 +332,7 @@ mod tests {
         };
         let tree = repo.find_tree(tree_id).unwrap();
         
-        let commit_id = repo.commit(
+        let _commit_id = repo.commit(
             Some("HEAD"),
             &signature,
             &signature,

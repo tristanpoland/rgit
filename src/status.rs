@@ -83,25 +83,25 @@ impl StatusDisplay {
     fn display_short_format(&self, status: &RepositoryStatus) -> Result<()> {
         // Show branch info first
         if !self.short_format {
-            self.display_branch_header(&status.branch_info)?;
+            self.display_branch_info(&status.branch_info)?;
         }
 
         // Display files in short format
         for file in &status.staged {
-            let index_status = self.get_short_status_char(&file.status, true);
-            let workdir_status = self.get_short_status_char(&file.status, false);
+            let index_status = self.get_short_status_char(file.status, true);
+            let workdir_status = self.get_short_status_char(file.status, false);
             println!("{}{} {}", 
-                    index_status.green(), 
-                    workdir_status.red(), 
+                    index_status.to_string().green(), 
+                    workdir_status.to_string().red(), 
                     file.path);
         }
 
         for file in &status.unstaged {
-            let index_status = self.get_short_status_char(&file.status, true);
-            let workdir_status = self.get_short_status_char(&file.status, false);
+            let index_status = self.get_short_status_char(file.status, true);
+            let workdir_status = self.get_short_status_char(file.status, false);
             println!("{}{} {}", 
-                    index_status.green(), 
-                    workdir_status.red(), 
+                    index_status.to_string().green(), 
+                    workdir_status.to_string().red(), 
                     file.path);
         }
 
@@ -336,11 +336,28 @@ impl StatusDisplay {
     /// Display individual file status with formatting
     fn display_file_status(&self, file: &FileStatus, staged: bool) -> Result<()> {
         let status_symbol = file.status_symbol(staged);
-        let status_color = if staged { Green } else if status_symbol == "untracked" { Red } else { Yellow };
-        
+        let (status_icon, status_color) = if staged {
+            ("✓", "green")
+        } else if status_symbol == "untracked" {
+            ("?", "red")
+        } else {
+            ("○", "yellow")
+        };
+
         let mut line = format!("  {} {}:",
-                              if staged { "✓" } else if status_symbol == "untracked" { "?" } else { "○" }.color(status_color).bold(),
-                              status_symbol.color(status_color));
+            match status_color {
+                "green" => status_icon.green().bold().to_string(),
+                "red" => status_icon.red().bold().to_string(),
+                "yellow" => status_icon.yellow().bold().to_string(),
+                _ => status_icon.normal().to_string(),
+            },
+            match status_color {
+                "green" => status_symbol.green().to_string(),
+                "red" => status_symbol.red().to_string(),
+                "yellow" => status_symbol.yellow().to_string(),
+                _ => status_symbol.normal().to_string(),
+            }
+        );
 
         // File path with proper formatting
         let file_path = if file.path.len() > 50 {

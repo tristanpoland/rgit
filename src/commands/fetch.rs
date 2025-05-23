@@ -96,6 +96,7 @@ async fn fetch_remote_by_name(repo: &Repository, remote_name: &str, config: &Con
         tags: false,
         depth: None,
         unshallow: false,
+        dry_run: false,
     };
     
     fetch_remote_with_options(repo, remote_name, &args, config).await
@@ -116,14 +117,16 @@ async fn fetch_remote_with_options(
     
     // Progress callback
     if config.ui.interactive {
-        callbacks.progress(|progress| {
-            if let Some(msg) = std::str::from_utf8(progress).ok() {
-                let msg = msg.trim();
-                if !msg.is_empty() {
-                    print!("\r{} {}", "📦".blue(), msg);
-                    io::stdout().flush().unwrap();
-                }
-            }
+        callbacks.transfer_progress(|stats| {
+            print!(
+                "\r{} Received {}/{} objects, {}/{} bytes",
+                "📦".blue(),
+                stats.received_objects(),
+                stats.total_objects(),
+                stats.received_bytes(),
+                stats.total_deltas()
+            );
+            io::stdout().flush().unwrap();
             true
         });
     }
@@ -160,17 +163,22 @@ async fn fetch_remote_with_options(
     }
     
     // Determine what to fetch
-    let refspecs = if args.tags {
-        vec!["refs/tags/*:refs/tags/*"]
+    let refspecs: Vec<String> = if args.tags {
+        vec!["refs/tags/*:refs/tags/*".to_string()]
     } else {
         // Use default refspecs from remote configuration
         let refspecs = remote.fetch_refspecs()?;
-        refspecs.iter().collect::<Option<Vec<&str>>>()
-            .ok_or_else(|| RgitError::InvalidRefspec("Failed to get refspecs".to_string()))?
+        let owned: Vec<String> = refspecs
+            .iter()
+            .map(|s| s.map(|s| s.to_string()))
+            .collect::<Option<Vec<String>>>()
+            .ok_or_else(|| RgitError::InvalidReference("Failed to get refspecs".to_string()))?;
+        owned
     };
     
     // Perform the fetch
-    remote.fetch(&refspecs, Some(&mut fetch_options), None)
+    let refspec_slices: Vec<&str> = refspecs.iter().map(|s| s.as_str()).collect();
+    remote.fetch(&refspec_slices, Some(&mut fetch_options), None)
         .map_err(|e| RgitError::FetchFailed(e.message().to_string()))?;
     
     // Handle pruning
@@ -193,13 +201,12 @@ fn prune_remote_refs(repo: &Repository, remote_name: &str, config: &Config) -> R
     let mut pruned_count = 0;
     
     // Get list of remote refs
-    let remote = repo.find_remote(remote_name)?;
-    let mut connection = remote.connect(git2::Direction::Fetch)?;
-    let remote_refs = connection.list()?;
+    let mut remote = repo.find_remote(remote_name)?;
+    let remote_refs = remote_ls(&mut remote)?;
     
     // Build set of existing remote branch names
     let mut remote_branches = std::collections::HashSet::new();
-    for remote_ref in remote_refs {
+    for remote_ref in &remote_refs {
         if let Some(name) = remote_ref.name().strip_prefix("refs/heads/") {
             remote_branches.insert(name.to_string());
         }
@@ -209,7 +216,7 @@ fn prune_remote_refs(repo: &Repository, remote_name: &str, config: &Config) -> R
     let references = repo.references_glob(&format!("{}*", remote_prefix))?;
     
     for reference in references {
-        let reference = reference?;
+        let mut reference = reference?;
         if let Some(name) = reference.name() {
             if let Some(branch_name) = name.strip_prefix(&remote_prefix) {
                 if !remote_branches.contains(branch_name) {
@@ -234,6 +241,14 @@ fn prune_remote_refs(repo: &Repository, remote_name: &str, config: &Config) -> R
     }
     
     Ok(())
+}
+
+/// Helper to list remote refs using remote_ls
+fn remote_ls<'a>(remote: &'a mut git2::Remote) -> Result<Vec<&'a git2::RemoteHead<'a>>> {
+    remote.connect(git2::Direction::Fetch)?;
+    let refs = remote.list()?;
+    remote.disconnect()?;
+    Ok(refs)
 }
 
 /// Show fetch summary
@@ -279,12 +294,14 @@ fn show_tracking_status(repo: &Repository) -> Result<()> {
     let current_branch = head.shorthand().unwrap_or("HEAD");
     
     // Check if current branch has upstream
-    if let Ok(upstream) = head.upstream() {
-        let upstream_name = upstream.shorthand().unwrap_or("unknown");
+    let branch = repo.find_branch(current_branch, git2::BranchType::Local)?;
+    if let Ok(upstream) = branch.upstream() {
+        let upstream_ref = upstream.get();
+        let upstream_name = upstream_ref.shorthand().unwrap_or("unknown");
         
         // Compare HEAD with upstream
         let head_oid = head.target().unwrap();
-        let upstream_oid = upstream.target().unwrap();
+        let upstream_oid = upstream_ref.target().unwrap();
         
         if head_oid == upstream_oid {
             println!("  {} {} is up to date with {}", 

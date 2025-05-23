@@ -304,7 +304,8 @@ impl RgitCore {
         let commit_id = if amend {
             self.log("Amending previous commit...");
             let head_commit = self.repo.head()?.peel_to_commit()?;
-            let parents: Vec<&Commit> = head_commit.parents().collect();
+            let parents: Vec<Commit> = head_commit.parents().collect();
+            let parent_refs: Vec<&Commit> = parents.iter().collect();
             
             self.repo.commit(
                 Some("HEAD"),
@@ -312,7 +313,7 @@ impl RgitCore {
                 &signature,
                 message,
                 &tree,
-                &parents,
+                &parent_refs,
             )?
         } else {
             self.log("Creating new commit...");

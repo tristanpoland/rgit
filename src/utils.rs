@@ -14,6 +14,14 @@ use crate::error::RgitError;
 // Time and Date Utilities
 // =============================================================================
 
+pub fn format_time(time: Time) -> String {
+    let datetime = Utc.timestamp_opt(time.seconds(), 0)
+        .single()
+        .unwrap_or_else(|| Utc::now());
+    
+    datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
 /// Format a git2::Time as a human-readable "time ago" string
 pub fn format_time_ago(time: Time) -> String {
     let now = chrono::Utc::now().timestamp();

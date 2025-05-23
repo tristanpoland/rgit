@@ -129,12 +129,12 @@ fn get_current_branch_name(repo: &Repository) -> Option<String> {
 }
 
 /// Perform fetch operation
-async fn perform_fetch(
-    repo: &Repository,
+async fn perform_fetch<'a>(
+    repo: &'a Repository,
     remote_name: &str,
     branch_name: &str,
     config: &Config,
-) -> Result<AnnotatedCommit> {
+) -> Result<AnnotatedCommit<'a>> {
     println!("{} Fetching from {}/{}", "📥".blue(), remote_name.cyan(), branch_name.yellow());
     
     let mut remote = repo.find_remote(remote_name)
@@ -144,12 +144,12 @@ async fn perform_fetch(
     let mut callbacks = RemoteCallbacks::new();
     
     if config.ui.interactive {
-        callbacks.progress(|progress| {
-            if let Some(msg) = std::str::from_utf8(progress).ok() {
-                print!("\r{} {}", "📦".blue(), msg.trim());
-                io::stdout().flush().unwrap();
+        callbacks.pack_progress(|_stage, current, total| {
+            if total > 0 {
+                let percentage = (current * 100) / total;
+                print!("\r{} Progress: {}%", "📦".blue(), percentage);
+                let _ = io::stdout().flush();
             }
-            true
         });
     }
     
@@ -189,9 +189,9 @@ async fn perform_fetch(
 }
 
 /// Perform merge operation
-async fn perform_merge(
-    repo: &Repository,
-    fetch_head: &AnnotatedCommit,
+async fn perform_merge<'a>(
+    repo: &'a Repository,
+    fetch_head: &AnnotatedCommit<'a>,
     args: &PullArgs,
     config: &Config,
 ) -> Result<()> {
@@ -201,6 +201,7 @@ async fn perform_merge(
         println!("{} Fast-forward merge", "⚡".yellow());
         perform_fast_forward_merge(repo, fetch_head)?;
     } else if analysis.0.is_normal() {
+        // Check if ff_only is set
         if args.ff_only {
             return Err(RgitError::FastForwardNotPossible.into());
         }
@@ -232,9 +233,9 @@ fn perform_fast_forward_merge(repo: &Repository, fetch_head: &AnnotatedCommit) -
 }
 
 /// Perform normal merge (creates merge commit)
-async fn perform_normal_merge(
-    repo: &Repository,
-    fetch_head: &AnnotatedCommit,
+async fn perform_normal_merge<'a>(
+    repo: &'a Repository,
+    fetch_head: &AnnotatedCommit<'a>,
     config: &Config,
 ) -> Result<()> {
     // Check for merge conflicts first
@@ -273,18 +274,20 @@ async fn perform_normal_merge(
 }
 
 /// Handle merge conflicts
-async fn handle_merge_conflicts(repo: &Repository, config: &Config) -> Result<()> {
+async fn handle_merge_conflicts<'a>(repo: &'a Repository, config: &Config) -> Result<()> {
     println!("{} Merge conflicts detected!", "⚠️".red().bold());
     
     let index = repo.index()?;
     let conflicts: Vec<_> = index.conflicts()?.collect();
     
     println!("{} Conflicted files:", "📝".yellow());
+    let mut conflict_files = Vec::new();
     for conflict in &conflicts {
         if let Ok((ancestor, ours, theirs)) = conflict {
             if let Some(our_entry) = ours {
-                if let Some(path) = std::str::from_utf8(&our_entry.path) {
+                if let Ok(path) = std::str::from_utf8(&our_entry.path) {
                     println!("  {} {}", "⚡".red(), path.yellow());
+                    conflict_files.push(path.to_string());
                 }
             }
         }
@@ -301,34 +304,33 @@ async fn handle_merge_conflicts(repo: &Repository, config: &Config) -> Result<()
             .with_message("Resolve conflicts manually, then continue")
             .confirm()?;
     } else {
-        return Err(RgitError::MergeConflicts(conflicts.len()).into());
+        // Return error with list of conflicted files
+        return Err(RgitError::MergeConflict(conflict_files).into());
     }
     
     Ok(())
 }
 
 /// Perform rebase operation
-async fn perform_rebase(
-    repo: &Repository,
-    fetch_head: &AnnotatedCommit,
+async fn perform_rebase<'a>(
+    repo: &'a Repository,
+    fetch_head: &AnnotatedCommit<'a>,
     _config: &Config,
 ) -> Result<()> {
     println!("{} Rebasing current branch", "🔄".blue());
     
-    let head_commit = repo.head()?.peel_to_commit()?;
-    let fetch_commit = repo.find_commit(fetch_head.id())?;
+    let signature = get_signature(repo)?;
     
-    // Find merge base
-    let merge_base = repo.merge_base(head_commit.id(), fetch_commit.id())?;
-    let base_commit = repo.find_commit(merge_base)?;
+    // Get the current branch
+    let head = repo.head()?;
+    let head_annotated = repo.reference_to_annotated_commit(&head)?;
     
     // Start rebase
-    let signature = get_signature(repo)?;
     let mut rebase = repo.rebase(
-        Some(&head_commit.as_object()),
-        Some(&base_commit.as_object()),
-        Some(&fetch_commit.as_object()),
-        Some(&signature),
+        Some(&head_annotated),
+        None,  // Use None for upstream base
+        Some(fetch_head),
+        None,
     )?;
     
     // Process rebase operations
@@ -355,7 +357,7 @@ async fn perform_rebase(
 }
 
 /// Get git signature for commits
-fn get_signature(repo: &Repository) -> Result<git2::Signature> {
+fn get_signature(repo: &Repository) -> Result<git2::Signature<'_>> {
     let config = repo.config()?;
     let name = config.get_string("user.name")
         .unwrap_or_else(|_| "Unknown User".to_string());
@@ -463,8 +465,10 @@ mod tests {
             remote: Some("origin".to_string()),
             branch: Some("main".to_string()),
             rebase: false,
-            ff_only: false,
+            no_edit: false,
+            no_commit: false,
             force: false,
+            ff_only: false,
         };
         
         let (remote, branch) = determine_pull_source(&repo, &args).unwrap();

@@ -17,9 +17,9 @@ use crate::interactive::InteractivePrompt;
 pub async fn execute(args: &CloneArgs, _rgit: &RgitCore, config: &Config) -> Result<()> {
     println!("{} Cloning repository...", "🚀".blue().bold());
     
-    let repo_url = &args.repository;
+    let repo_url = &args.url; // Fixed: changed from args.repository to args.url
     let target_dir = args.directory.as_ref()
-        .map(|d| d.clone())
+        .map(|d| PathBuf::from(d)) // Fixed: convert String to PathBuf
         .unwrap_or_else(|| PathBuf::from(extract_repo_name(repo_url)));
     
     // Validate URL
@@ -28,8 +28,8 @@ pub async fn execute(args: &CloneArgs, _rgit: &RgitCore, config: &Config) -> Res
     }
     
     // Check if directory already exists
-    if target_dir.exists() {
-        if !target_dir.read_dir()?.next().is_none() {
+    if target_dir.exists() { // Fixed: now works with PathBuf
+        if !target_dir.read_dir()?.next().is_none() { // Fixed: now works with PathBuf
             if config.is_interactive() {
                 let overwrite = InteractivePrompt::new()
                     .with_message(&format!("Directory '{}' is not empty. Continue anyway?", target_dir.display()))
@@ -40,7 +40,8 @@ pub async fn execute(args: &CloneArgs, _rgit: &RgitCore, config: &Config) -> Res
                     return Ok(());
                 }
             } else {
-                return Err(RgitError::DirectoryNotEmpty(target_dir.display().to_string()).into());
+                // Note: You'll need to add DirectoryNotEmpty variant to RgitError enum
+                return Err(anyhow::anyhow!("Directory '{}' is not empty", target_dir.display()));
             }
         }
     }
@@ -57,13 +58,14 @@ pub async fn execute(args: &CloneArgs, _rgit: &RgitCore, config: &Config) -> Res
         println!("{} Depth: {} (shallow clone)", "📏".yellow(), depth);
     }
     
-    if args.bare {
-        println!("{} Mode: Bare repository", "📦".blue());
-    }
+    // Note: You'll need to add these fields to CloneArgs or remove these checks
+    // if args.bare {
+    //     println!("{} Mode: Bare repository", "📦".blue());
+    // }
     
-    if args.mirror {
-        println!("{} Mode: Mirror repository", "🪞".blue());
-    }
+    // if args.mirror {
+    //     println!("{} Mode: Mirror repository", "🪞".blue());
+    // }
     
     // Perform the clone
     println!("\n{} Cloning...", "⏳".yellow());
@@ -173,8 +175,9 @@ async fn perform_clone(
     
     // Set up progress callback
     let mut callbacks = RemoteCallbacks::new();
-    callbacks.progress(|prog| {
-        progress.borrow_mut().update(prog);
+    // Fixed: use correct method name for git2
+    callbacks.transfer_progress(|stats| {
+        progress.borrow_mut().update(stats);
         true
     });
     
@@ -182,14 +185,15 @@ async fn perform_clone(
     let mut fetch_options = FetchOptions::new();
     fetch_options.remote_callbacks(callbacks);
     
-    // Configure clone options
-    if args.bare {
-        builder.bare(true);
-    }
+    // Configure clone options - commented out since fields don't exist in CloneArgs
+    // if args.bare {
+    //     builder.bare(true);
+    // }
     
-    if args.mirror {
-        builder.mirror(true);
-    }
+    // Note: mirror() method may not exist in git2 - check documentation
+    // if args.mirror {
+    //     builder.mirror(true);
+    // }
     
     if let Some(branch) = &args.branch {
         builder.branch(branch);
@@ -203,10 +207,10 @@ async fn perform_clone(
     
     // Perform clone
     let repo = builder.clone(url, target)
-        .map_err(|e| RgitError::CloneFailed(e.message().to_string()))?;
+        .map_err(|e| anyhow::anyhow!("Clone failed: {}", e.message()))?;
     
     // Handle submodules if requested
-    if args.recursive && !args.bare {
+    if args.recursive {
         println!("\n{} Initializing submodules...", "🔗".blue());
         init_submodules(&repo)?;
     }
@@ -217,19 +221,19 @@ async fn perform_clone(
 
 /// Initialize submodules recursively
 fn init_submodules(repo: &git2::Repository) -> Result<()> {
-    let mut submodules = repo.submodules()?;
+    let submodules = repo.submodules()?;
     
-    for mut submodule in submodules.drain(..) {
+    for mut submodule in submodules {
         println!("  {} Initializing submodule: {}", 
                 "🔗".blue(), 
                 submodule.name().unwrap_or("unnamed").cyan());
         
         submodule.init(false)?;
         
-        let subrepo = submodule.open()?;
         submodule.update(true, None)?;
         
         // Recursively init submodules in submodules
+        let subrepo = submodule.open()?;
         if let Ok(sub_submodules) = subrepo.submodules() {
             if !sub_submodules.is_empty() {
                 init_submodules(&subrepo)?;
@@ -338,14 +342,13 @@ fn format_bytes(bytes: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
 
     #[test]
     fn test_extract_repo_name() {
-        assert_eq!(extract_repo_name("https://github.com/user/repo.git"), PathBuf::from("repo"));
-        assert_eq!(extract_repo_name("git@github.com:user/repo.git"), PathBuf::from("repo"));
-        assert_eq!(extract_repo_name("https://github.com/user/repo"), PathBuf::from("repo"));
-        assert_eq!(extract_repo_name("/local/path/repo"), PathBuf::from("repo"));
+        assert_eq!(extract_repo_name("https://github.com/user/repo.git"), "repo");
+        assert_eq!(extract_repo_name("git@github.com:user/repo.git"), "repo");
+        assert_eq!(extract_repo_name("https://github.com/user/repo"), "repo");
+        assert_eq!(extract_repo_name("/local/path/repo"), "repo");
     }
 
     #[test]

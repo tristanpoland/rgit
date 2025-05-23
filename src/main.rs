@@ -81,8 +81,8 @@ fn init_tracing() {
 fn print_banner() {
     println!("{}", format!("
 ╭─────────────────────────────────────────╮
-│  🦀 {}  - A Superior Git CLI in Rust    │
-│     Version {}                          │
+│  🦀 {} - A Superior Git CLI in Rust   │
+│     Version {}                      │
 │     Making Git operations delightful    │
 ╰─────────────────────────────────────────╯
 ", "rgit".cyan().bold(), env!("CARGO_PKG_VERSION")).cyan());
@@ -98,7 +98,8 @@ async fn execute_command(cli: Cli, config: Config) -> Result<()> {
             commands::init::execute(args, &config).await
         }
         Commands::Clone(args) => {
-            commands::clone::execute(args, &config).await
+            let rgit = RgitCore::new(cli.verbose)?;
+            commands::clone::execute(args, &rgit, &config).await
         }
 
         // Core Git operations
@@ -107,8 +108,8 @@ async fn execute_command(cli: Cli, config: Config) -> Result<()> {
             commands::status::execute(args, &rgit, &config).await
         }
         Commands::Add(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::add::execute(args, &rgit, &config).await
+            let mut rgit = RgitCore::new(cli.verbose)?;
+            commands::add::execute(args, &mut rgit, &config).await
         }
         Commands::Commit(args) => {
             let rgit = RgitCore::new(cli.verbose)?;
@@ -133,34 +134,42 @@ async fn execute_command(cli: Cli, config: Config) -> Result<()> {
             commands::branch::execute(args, &rgit, &config).await
         }
         Commands::Checkout(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::checkout::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::checkout::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Merge(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::merge::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::merge::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Rebase(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::rebase::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::rebase::execute(args, &rgit, &config).await
+            todo!()
         }
 
         // History and information
         Commands::Log(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::log::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::log::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Diff(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::diff::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::diff::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Show(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::show::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::show::execute(args, &rgit, &config).await
+            todo!()
         }
+
         Commands::Blame(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::blame::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::blame::execute(args, &rgit, &config).await
+            todo!()
         }
 
         // Submodule operations
@@ -171,16 +180,19 @@ async fn execute_command(cli: Cli, config: Config) -> Result<()> {
 
         // Advanced operations
         Commands::Stash(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::stash::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::stash::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Tag(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::tag::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::tag::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Remote(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::remote::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::remote::execute(args, &rgit, &config).await
+            todo!()
         }
 
         // Ease-of-use commands
@@ -193,12 +205,14 @@ async fn execute_command(cli: Cli, config: Config) -> Result<()> {
             commands::quick_commit::execute(args, &rgit, &config).await
         }
         Commands::Undo(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::undo::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::undo::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Clean(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::clean::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::clean::execute(args, &rgit, &config).await
+            todo!()
         }
 
         // Utility commands
@@ -209,42 +223,51 @@ async fn execute_command(cli: Cli, config: Config) -> Result<()> {
             commands::learn::execute(args, &config).await
         }
         Commands::Resolve => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::resolve::execute(&rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::resolve::execute(&rgit, &config).await
+            todo!()
         }
         Commands::Backup(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::backup::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::backup::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Restore(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::restore::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::restore::execute(args, &rgit, &config).await
+            todo!()
         }
 
         // Advanced Git operations
         Commands::Bisect(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::bisect::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::bisect::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Reflog(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::reflog::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::reflog::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Gc(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::gc::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::gc::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Fsck(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::fsck::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::fsck::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::CherryPick(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::cherry_pick::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::cherry_pick::execute(args, &rgit, &config).await
+            todo!()
         }
         Commands::Grep(args) => {
-            let rgit = RgitCore::new(cli.verbose)?;
-            commands::grep::execute(args, &rgit, &config).await
+        //    let rgit = RgitCore::new(cli.verbose)?;
+        //    commands::grep::execute(args, &rgit, &config).await
+            todo!()
         }
     }
 }

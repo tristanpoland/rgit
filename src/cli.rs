@@ -248,7 +248,7 @@ pub enum GitignoreTemplate {
 pub struct CloneArgs {
     /// Repository URL to clone
     #[arg(value_name = "URL", help = "Git repository URL to clone")]
-    pub url: String,
+    pub url: String, // Note: This was the correct field name
 
     /// Directory name (optional, defaults to repository name)
     #[arg(
@@ -288,6 +288,14 @@ pub struct CloneArgs {
     /// Clone with specific protocol
     #[arg(long, value_enum, help = "Force specific protocol for cloning")]
     pub protocol: Option<Protocol>,
+
+    /// Create a bare repository
+    #[arg(long, help = "Create a bare repository without a working directory")]
+    pub bare: bool,
+
+    /// Create a mirror repository
+    #[arg(long, help = "Create a mirror repository")]
+    pub mirror: bool,
 }
 
 #[derive(ValueEnum, Debug, Clone)]
@@ -570,6 +578,8 @@ pub struct PullArgs {
     pub no_commit: bool,
     #[arg(short, long)]
     pub force: bool,
+    #[arg(long)]
+    pub ff_only: bool,
 }
 #[derive(Args, Debug)]
 pub struct FetchArgs {
@@ -582,6 +592,10 @@ pub struct FetchArgs {
     pub dry_run: bool,
     #[arg(long)]
     pub tags: bool,
+    #[arg(long)]
+    pub depth: Option<u32>,
+    #[arg(long)]
+    pub unshallow: bool,
 }
 #[derive(Args, Debug)]
 pub struct BranchArgs {
@@ -602,6 +616,8 @@ pub struct BranchArgs {
     pub merged: bool,
     #[arg(long)]
     pub no_merged: bool,
+    #[arg(long)]
+    pub remotes: bool,
 }
 #[derive(Args, Debug)]
 pub struct CheckoutArgs {

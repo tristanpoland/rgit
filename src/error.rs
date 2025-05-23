@@ -22,6 +22,26 @@ pub enum RgitError {
     
     #[error("Repository is in an invalid state: {0}")]
     InvalidRepositoryState(String),
+
+    /// Directory is not empty error
+    #[error("Directory '{0}' is not empty")]
+    DirectoryNotEmpty(String),
+    
+    /// Clone operation failed
+    #[error("Clone failed: {0}")]
+    CloneFailed(String),
+
+    #[error("You have uncommitted changes. Commit or stash them before pulling.")]
+    UncommittedChanges,
+    
+    #[error("No upstream branch configured for the current branch")]
+    NoUpstreamBranch,
+    
+    #[error("Fast-forward merge is not possible")]
+    FastForwardNotPossible,
+    
+    #[error("Merge is not possible")]
+    MergeNotPossible,
     
     // =========================================================================
     // File and Index Errors
@@ -88,6 +108,9 @@ pub enum RgitError {
     
     #[error("Detached HEAD state")]
     DetachedHead,
+
+    #[error("Invalid branch name: {0}")]
+    InvalidBranchName(String),
     
     // =========================================================================
     // Remote Errors
@@ -140,7 +163,7 @@ pub enum RgitError {
     // Merge and Rebase Errors
     // =========================================================================
     
-    #[error("Merge conflict in: {0}")]
+    #[error("Merge conflict in: {0:?}")]
     MergeConflict(Vec<String>),
     
     #[error("Cannot merge: working tree has uncommitted changes")]
