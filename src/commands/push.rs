@@ -182,7 +182,7 @@ async fn perform_push(
                 print!("\r{} Progress: {}% ({}/{})", "📤".blue(), percentage, current, total);
                 io::stdout().flush().unwrap();
             }
-            true
+            ()
         });
     }
     

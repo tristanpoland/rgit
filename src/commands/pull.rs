@@ -283,8 +283,8 @@ async fn handle_merge_conflicts<'a>(repo: &'a Repository, config: &Config) -> Re
     println!("{} Conflicted files:", "📝".yellow());
     let mut conflict_files = Vec::new();
     for conflict in &conflicts {
-        if let Ok((ancestor, ours, theirs)) = conflict {
-            if let Some(our_entry) = ours {
+        if let Ok(index_conflict) = conflict {
+            if let Some(our_entry) = &index_conflict.our {
                 if let Ok(path) = std::str::from_utf8(&our_entry.path) {
                     println!("  {} {}", "⚡".red(), path.yellow());
                     conflict_files.push(path.to_string());

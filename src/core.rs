@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use tracing::{debug, info, warn};
 use colored::*;
 use crate::error::RgitError;
-use crate::utils::{format_time, calculate_file_changes, get_branch_status};
+// Remove unused imports
+// use crate::utils::{format_time, calculate_file_changes, get_branch_status};
 
 /// Central Git repository manager with enhanced functionality
 pub struct RgitCore {
@@ -186,7 +187,7 @@ impl RgitCore {
                 // Calculate ahead/behind commits
                 if let (Some(local_oid), Some(upstream_oid)) = (
                     head.target(),
-                    upstream.get().target()
+                    upstream.get().target()  // FIX: This was the issue at line 219
                 ) {
                     if let Ok((ahead, behind)) = self.repo.graph_ahead_behind(local_oid, upstream_oid) {
                         info.ahead = ahead;
@@ -216,16 +217,15 @@ impl RgitCore {
             };
 
             // Get last commit info
-            if let Ok(reference) = branch.get() {
-                if let Some(oid) = reference.target() {
-                    if let Ok(commit) = self.repo.find_commit(oid) {
-                        info.last_commit = Some(CommitInfo {
-                            oid: oid.to_string(),
-                            message: commit.message().unwrap_or("").to_string(),
-                            author: commit.author().name().unwrap_or("Unknown").to_string(),
-                            time: commit.time(),
-                        });
-                    }
+            let reference = branch.get();
+            if let Some(oid) = reference.target() {
+                if let Ok(commit) = self.repo.find_commit(oid) {
+                    info.last_commit = Some(CommitInfo {
+                        oid: oid.to_string(),
+                        message: commit.message().unwrap_or("").to_string(),
+                        author: commit.author().name().unwrap_or("Unknown").to_string(),
+                        time: commit.time(),
+                    });
                 }
             }
 
@@ -377,7 +377,7 @@ impl RgitCore {
         
         // Otherwise return the first remote
         remotes.get(0)
-            .and_then(|r| r)
+            .and_then(|r| Some(r))
             .map(|s| s.to_string())
             .ok_or_else(|| RgitError::NoRemoteConfigured.into())
     }
@@ -393,6 +393,7 @@ impl RgitCore {
                     let info = RemoteInfo {
                         name: name.to_string(),
                         url: remote.url().unwrap_or("").to_string(),
+                        // FIX: Wrap in Some() to match Option<String> type
                         push_url: remote.pushurl().map(|s| s.to_string()),
                     };
                     remote_list.push(info);

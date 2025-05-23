@@ -234,7 +234,8 @@ fn init_submodules(repo: &git2::Repository) -> Result<()> {
         
         // Recursively init submodules in submodules
         let subrepo = submodule.open()?;
-        if let Ok(sub_submodules) = subrepo.submodules() {
+        let sub_submodules = subrepo.submodules();
+        if let Ok(sub_submodules) = &sub_submodules {
             if !sub_submodules.is_empty() {
                 init_submodules(&subrepo)?;
             }

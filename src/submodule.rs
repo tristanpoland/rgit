@@ -195,7 +195,7 @@ impl<'a> SubmoduleManager<'a> {
     }
 
     /// Display detailed submodule status
-    fn display_detailed_status(&self, health: &SubmoduleHealth) -> Result<()> {
+    pub fn display_detailed_status(&self, health: &SubmoduleHealth) -> Result<()> {
         println!("\n{} Detailed Submodule Status:", "📋".blue().bold());
         
         for (name, status) in &health.submodules {
@@ -206,7 +206,7 @@ impl<'a> SubmoduleManager<'a> {
     }
 
     /// Display details for a single submodule
-    fn display_submodule_details(&self, name: &str, status: &SubmoduleStatus) -> Result<()> {
+    pub fn display_submodule_details(&self, name: &str, status: &SubmoduleStatus) -> Result<()> {
         println!("\n🗂️  {} {}", name.cyan().bold(), 
                 format!("({})", status.path.display()).dimmed());
         
@@ -323,7 +323,7 @@ impl<'a> SubmoduleManager<'a> {
         let submodule = self.rgit.repo.find_submodule(name)
             .with_context(|| format!("Submodule not found: {}", name))?;
         
-        let sub_repo = submodule.open()
+        let mut sub_repo = submodule.open()
             .with_context(|| format!("Failed to open submodule: {}", name))?;
         
         let signature = sub_repo.signature()

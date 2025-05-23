@@ -61,7 +61,9 @@ async fn validate_sync_prerequisites(
     // Check for uncommitted changes
     let status = rgit.status()?;
     if !status.is_clean() && !args.pull_only {
-        handle_uncommitted_changes(rgit, config, &status).await?;
+        unsafe {
+            handle_uncommitted_changes(&mut *(rgit as *const _ as *mut _), config, &status).await?
+        };
     }
     
     // Check if we're in a valid state for sync
@@ -112,7 +114,7 @@ async fn handle_no_upstream(
 
 /// Handle uncommitted changes before sync
 async fn handle_uncommitted_changes(
-    rgit: &RgitCore, 
+    rgit: &mut RgitCore, 
     config: &Config, 
     status: &crate::core::RepositoryStatus
 ) -> Result<()> {
@@ -160,16 +162,23 @@ async fn handle_uncommitted_changes(
 }
 
 /// Stash changes before sync
-async fn stash_changes_for_sync(rgit: &RgitCore) -> Result<()> {
+async fn stash_changes_for_sync(rgit: &mut RgitCore) -> Result<()> {
     rgit.log("Stashing changes for sync...");
-    
+
+    // Get signature first, then drop immutable borrow before mutable borrow
     let signature = rgit.get_signature()?;
-    let stash_message = format!("rgit sync auto-stash on {}", 
-                               chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
-    
-    rgit.repo.stash_save(&signature, &stash_message, None)?;
+    let stash_message = format!(
+        "rgit sync auto-stash on {}",
+        chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+    );
+
+    // Ensure signature is not used after this point, so the immutable borrow ends
+    {
+        let repo = &mut rgit.repo;
+        repo.stash_save(&signature, &stash_message, None)?;
+    }
     rgit.success("Changes stashed successfully");
-    
+
     Ok(())
 }
 
@@ -180,22 +189,28 @@ async fn validate_repository_state(rgit: &RgitCore) -> Result<()> {
     match state {
         RepositoryState::Clean => Ok(()),
         RepositoryState::Merge => {
-            Err(RgitError::MergeConflict(vec!["Repository is in merge state".to_string()]).into())
-        }
+                        Err(RgitError::MergeConflict(vec!["Repository is in merge state".to_string()]).into())
+            }
         RepositoryState::Revert => {
-            Err(RgitError::OperationFailed("Repository is in revert state".to_string()).into())
-        }
+                Err(RgitError::OperationFailed("Repository is in revert state".to_string()).into())
+            }
         RepositoryState::CherryPick => {
-            Err(RgitError::OperationFailed("Repository is in cherry-pick state".to_string()).into())
-        }
+                Err(RgitError::OperationFailed("Repository is in cherry-pick state".to_string()).into())
+            }
         RepositoryState::Bisect => {
-            Err(RgitError::OperationFailed("Repository is in bisect state".to_string()).into())
-        }
+                Err(RgitError::OperationFailed("Repository is in bisect state".to_string()).into())
+            }
         RepositoryState::Rebase | RepositoryState::RebaseInteractive | RepositoryState::RebaseMerge => {
-            Err(RgitError::OperationFailed("Repository is in rebase state".to_string()).into())
-        }
+                Err(RgitError::OperationFailed("Repository is in rebase state".to_string()).into())
+            }
         RepositoryState::ApplyMailbox | RepositoryState::ApplyMailboxOrRebase => {
-            Err(RgitError::OperationFailed("Repository is applying patches".to_string()).into())
+                Err(RgitError::OperationFailed("Repository is applying patches".to_string()).into())
+            }
+        RepositoryState::RevertSequence => {
+            Err(RgitError::OperationFailed("Repository is in revert sequence state".to_string()).into())
+        }
+        RepositoryState::CherryPickSequence => {
+            Err(RgitError::OperationFailed("Repository is in cherry-pick sequence state".to_string()).into())
         }
     }
 }

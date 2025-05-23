@@ -248,7 +248,7 @@ fn remote_ls<'a>(remote: &'a mut git2::Remote) -> Result<Vec<&'a git2::RemoteHea
     remote.connect(git2::Direction::Fetch)?;
     let refs = remote.list()?;
     remote.disconnect()?;
-    Ok(refs)
+    Ok(refs.to_vec())
 }
 
 /// Show fetch summary
