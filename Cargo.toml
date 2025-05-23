@@ -5,9 +5,7 @@ edition = "2021"
 description = "A superior Git CLI written in Rust with enhanced UX and intelligent submodule handling"
 authors = ["rgit Team <team@rgit.dev>"]
 license = "MIT"
-repository = "https://github.com/rgit-rs/rgit"
-homepage = "https://rgit.dev"
-documentation = "https://docs.rgit.dev"
+repository = "https://github.com/tristanpoland/rgit"
 keywords = ["git", "cli", "vcs", "submodules", "rust"]
 categories = ["command-line-utilities", "development-tools"]
 
