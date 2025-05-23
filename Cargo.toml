@@ -1,0 +1,83 @@
+[package]
+name = "rgit"
+version = "1.0.0"
+edition = "2021"
+description = "A superior Git CLI written in Rust with enhanced UX and intelligent submodule handling"
+authors = ["rgit Team <team@rgit.dev>"]
+license = "MIT"
+repository = "https://github.com/rgit-rs/rgit"
+homepage = "https://rgit.dev"
+documentation = "https://docs.rgit.dev"
+keywords = ["git", "cli", "vcs", "submodules", "rust"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "rgit"
+path = "src/main.rs"
+
+[dependencies]
+# CLI Framework
+clap = { version = "4.4", features = ["derive", "color", "suggestions"] }
+clap_complete = "4.4"
+
+# Git Operations
+git2 = { version = "0.18", features = ["vendored-libgit2"] }
+
+# UI/UX
+colored = "2.0"
+dialoguer = { version = "0.11", features = ["completion"] }
+indicatif = "0.17"
+console = "0.15"
+crossterm = "0.27"
+
+# Error Handling & Logging
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Text Processing
+similar = "2.2"
+regex = "1.10"
+unicode-width = "0.1"
+
+# File Operations
+walkdir = "2.4"
+tempfile = "3.8"
+dunce = "1.0"
+
+# Async/Threading
+tokio = { version = "1.0", features = ["full"] }
+rayon = "1.8"
+
+# System Integration
+which = "7.0.3"
+dirs = "6.0.0"
+
+# URL Handling
+url = "2.4"
+num_cpus = "1.16.0"
+atty = "0.2.14"
+async-trait = "0.1.88"
+
+[dev-dependencies]
+tempdir = "0.3"
+assert_cmd = "2.0"
+predicates = "3.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+debug = true

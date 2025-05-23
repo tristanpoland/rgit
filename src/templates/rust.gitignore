@@ -1,0 +1,50 @@
+# Rust build artifacts
+target/
+Cargo.lock
+*.rs.bk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# Test coverage
+coverage/
+tarpaulin-report.html
+
+# Backup files
+*.orig
+*.bak
+
+# Local configuration
+config.local.*
+
+# Documentation build
+book/
+docs/_build/
+
+# Flamegraph output
+flamegraph.svg
+perf.data*
+
+# Criterion benchmark output
+target/criterion/
+
+# Memory profiling
+massif.out.*
+callgrind.out.*
+
+# Local development
+.local/
+scratch/
