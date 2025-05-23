@@ -172,11 +172,10 @@ async fn stash_changes_for_sync(rgit: &mut RgitCore) -> Result<()> {
         chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
     );
 
-    // Ensure signature is not used after this point, so the immutable borrow ends
-    {
-        let repo = &mut rgit.repo;
-        repo.stash_save(&signature, &stash_message, None)?;
-    }
+    // Ensure immutable borrow ends before mutable borrow
+    let signature = signature; // drop immutable borrow here
+    let repo = &mut rgit.repo;
+    repo.stash_save(&signature, &stash_message, None)?;
     rgit.success("Changes stashed successfully");
 
     Ok(())

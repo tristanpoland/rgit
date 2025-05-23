@@ -9,8 +9,8 @@ use crate::config::Config;
 use crate::core::RgitCore;
 use crate::error::RgitError;
 use crate::interactive::{InteractivePrompt, ProgressDisplay, TableDisplay};
-use crate::submodule::{SubmoduleManager, SubmoduleStatus, SubmoduleIssue};
-use crate::utils::{format_time_ago, parse_git_url};
+use crate::submodule::SubmoduleManager;
+use crate::utils::parse_git_url;
 
 /// Execute submodule command
 pub async fn execute(args: &SubmoduleArgs, rgit: &RgitCore, config: &Config) -> Result<()> {
@@ -131,8 +131,8 @@ async fn init_submodules(
         return Ok(());
     }
     
-    let target_submodules = if all || paths.is_empty() {
-        submodules
+    let target_submodules: Vec<_> = if all || paths.is_empty() {
+        submodules.iter().collect()
     } else {
         filter_submodules_by_path(&submodules, paths)?
     };
@@ -148,9 +148,8 @@ async fn init_submodules(
     let mut initialized = 0;
     let mut skipped = 0;
     
-    for mut submodule in target_submodules {
+    for submodule in target_submodules {
         let name = submodule.name().unwrap_or("unknown");
-        let path = submodule.path();
         
         // Check if already initialized
         if submodule.open().is_ok() {
@@ -159,7 +158,9 @@ async fn init_submodules(
             continue;
         }
         
-        match submodule.init(false) {
+        // Create a mutable reference by finding the submodule again
+        let mut mutable_submodule = manager.rgit.repo.find_submodule(submodule.path().to_str().unwrap())?;
+        match mutable_submodule.init(false) {
             Ok(()) => {
                 manager.rgit.success(&format!("Initialized '{}'", name));
                 initialized += 1;
@@ -202,8 +203,8 @@ async fn update_submodules(
         return Ok(());
     }
     
-    let target_submodules = if paths.is_empty() {
-        submodules
+    let target_submodules: Vec<_> = if paths.is_empty() {
+        submodules.iter().collect()
     } else {
         filter_submodules_by_path(&submodules, paths)?
     };
@@ -222,7 +223,7 @@ async fn update_submodules(
     let mut updated = 0;
     let mut failed = 0;
     
-    for (i, mut submodule) in target_submodules.into_iter().enumerate() {
+    for (i, submodule) in target_submodules.iter().enumerate() {
         let name = submodule.name().unwrap_or("unknown");
         
         if let Some(ref pb) = progress {
@@ -230,9 +231,12 @@ async fn update_submodules(
             pb.set_message(&format!("Updating {}", name));
         }
         
+        // Get a mutable reference to the submodule
+        let mut mutable_submodule = manager.rgit.repo.find_submodule(submodule.path().to_str().unwrap())?;
+        
         // Initialize if needed and requested
-        if init && submodule.open().is_err() {
-            if let Err(e) = submodule.init(false) {
+        if init && mutable_submodule.open().is_err() {
+            if let Err(e) = mutable_submodule.init(false) {
                 manager.rgit.warning(&format!("Failed to initialize '{}': {}", name, e));
                 failed += 1;
                 continue;
@@ -240,14 +244,14 @@ async fn update_submodules(
         }
         
         // Update the submodule
-        match update_single_submodule(&mut submodule, merge, rebase, remote, force) {
+        match update_single_submodule(&mut mutable_submodule, merge, rebase, remote, force) {
             Ok(()) => {
                 manager.rgit.success(&format!("Updated '{}'", name));
                 updated += 1;
                 
                 // Recursive update if requested
                 if recursive {
-                    if let Err(e) = update_submodule_recursively(&submodule, config).await {
+                    if let Err(e) = update_submodule_recursively(submodule, config).await {
                         manager.rgit.warning(&format!("Recursive update failed for '{}': {}", name, e));
                     }
                 }
@@ -319,8 +323,8 @@ async fn sync_submodules(
         return Ok(());
     }
     
-    let target_submodules = if paths.is_empty() {
-        submodules
+    let target_submodules: Vec<_> = if paths.is_empty() {
+        submodules.iter().collect()
     } else {
         filter_submodules_by_path(&submodules, paths)?
     };
@@ -491,7 +495,7 @@ fn validate_submodule_add_inputs(url: &str, path: &str, _config: &Config) -> Res
 fn show_submodule_add_preview(
     url: &str,
     path: &str,
-    branch: &Option<String>,
+    _branch: &Option<String>,
     name: &Option<String>,
     depth: Option<u32>,
     config: &Config,
@@ -504,7 +508,7 @@ fn show_submodule_add_preview(
     println!("  {} {}", "URL:".bold(), url.cyan());
     println!("  {} {}", "Path:".bold(), path.yellow());
     
-    if let Some(ref branch_name) = branch {
+    if let Some(ref branch_name) = _branch {
         println!("  {} {}", "Branch:".bold(), branch_name.green());
     }
     
@@ -536,7 +540,7 @@ fn add_submodule_to_repo(
     rgit: &RgitCore,
     url: &str,
     path: &str,
-    branch: Option<&str>,
+    _branch: Option<&str>,
     _name: Option<&str>,
 ) -> Result<()> {
     // In real implementation, this would:
@@ -552,9 +556,9 @@ fn add_submodule_to_repo(
 
 /// Filter submodules by path patterns
 fn filter_submodules_by_path<'a>(
-    submodules: &'a [Submodule],
+    submodules: &'a [Submodule<'_>],
     paths: &[String],
-) -> Result<Vec<&'a Submodule>> {
+) -> Result<Vec<&'a Submodule<'a>>> {
     let mut filtered = Vec::new();
     
     for submodule in submodules {
@@ -573,7 +577,7 @@ fn filter_submodules_by_path<'a>(
 }
 
 /// Show initialization preview
-fn show_init_preview(submodules: &[Submodule], config: &Config) -> Result<()> {
+fn show_init_preview(submodules: &[&Submodule<'_>], config: &Config) -> Result<()> {
     if !config.ui.interactive {
         return Ok(());
     }
@@ -594,11 +598,7 @@ fn show_init_preview(submodules: &[Submodule], config: &Config) -> Result<()> {
 }
 
 /// Show initialization summary
-fn show_init_summary(initialized: usize, skipped: usize, config: &Config) -> Result<()> {
-    if !config.ui.interactive {
-        return Ok(());
-    }
-    
+fn show_init_summary(initialized: usize, skipped: usize, _config: &Config) -> Result<()> {
     println!("\n{} Initialization Summary:", "📊".blue().bold());
     println!("  {} {} initialized", "✅".green(), initialized);
     
@@ -611,7 +611,7 @@ fn show_init_summary(initialized: usize, skipped: usize, config: &Config) -> Res
 
 /// Show update preview
 fn show_update_preview(
-    submodules: &[&Submodule],
+    submodules: &[&Submodule<'_>],
     init: bool,
     recursive: bool,
     merge: bool,
@@ -643,7 +643,7 @@ fn show_update_preview(
 
 /// Update a single submodule
 fn update_single_submodule(
-    submodule: &mut Submodule,
+    submodule: &mut Submodule<'_>,
     _merge: bool,
     _rebase: bool,
     _remote: bool,
@@ -656,7 +656,7 @@ fn update_single_submodule(
 
 /// Update submodule recursively
 async fn update_submodule_recursively(
-    _submodule: &Submodule,
+    _submodule: &Submodule<'_>,
     _config: &Config,
 ) -> Result<()> {
     // In real implementation, this would recursively update nested submodules
@@ -664,11 +664,7 @@ async fn update_submodule_recursively(
 }
 
 /// Show update summary
-fn show_update_summary(updated: usize, failed: usize, config: &Config) -> Result<()> {
-    if !config.ui.interactive {
-        return Ok(());
-    }
-    
+fn show_update_summary(updated: usize, failed: usize, _config: &Config) -> Result<()> {
     println!("\n{} Update Summary:", "📊".blue().bold());
     println!("  {} {} updated successfully", "✅".green(), updated);
     
@@ -714,7 +710,7 @@ fn show_health_summary(
 
 /// Show submodule status table
 fn show_submodule_status_table(
-    submodules: &[Submodule],
+    submodules: &[Submodule<'_>],
     recursive: bool,
     config: &Config,
 ) -> Result<()> {
@@ -751,7 +747,7 @@ fn show_submodule_status_table(
 }
 
 /// Get submodule information for table display
-fn get_submodule_table_info(submodule: &Submodule) -> Result<(String, String, String)> {
+fn get_submodule_table_info(submodule: &Submodule<'_>) -> Result<(String, String, String)> {
     let status = if submodule.open().is_ok() {
         "✅ OK".green().to_string()
     } else {
@@ -829,7 +825,7 @@ fn add_nested_submodules_to_table(
 }
 
 /// Show submodule recommendations
-fn show_submodule_recommendations(submodules: &[Submodule], config: &Config) -> Result<()> {
+fn show_submodule_recommendations(submodules: &[Submodule<'_>], config: &Config) -> Result<()> {
     if !config.ui.interactive {
         return Ok(());
     }
@@ -874,7 +870,7 @@ fn show_submodule_recommendations(submodules: &[Submodule], config: &Config) -> 
 }
 
 /// Show deinit preview
-fn show_deinit_preview(submodule: &Submodule, remove: bool, config: &Config) -> Result<()> {
+fn show_deinit_preview(submodule: &Submodule<'_>, remove: bool, config: &Config) -> Result<()> {
     if !config.ui.interactive {
         return Ok(());
     }
@@ -912,7 +908,7 @@ fn confirm_submodule_deinit(name: &str, remove: bool, config: &Config) -> Result
 /// Deinitialize submodule implementation
 fn deinit_submodule_implementation(
     _rgit: &RgitCore,
-    _submodule: &Submodule,
+    _submodule: &Submodule<'_>,
     _remove: bool,
 ) -> Result<()> {
     // In real implementation, this would:
@@ -964,7 +960,7 @@ fn show_submodule_add_next_steps(path: &str, config: &Config) -> Result<()> {
     println!("\n{} Next steps:", "💡".blue());
     println!("  • {} - Stage the submodule", "rgit add .gitmodules".cyan());
     println!("  • {} - Commit the submodule addition", "rgit commit".cyan());
-    println!("  • {} - Check submodule status", format!("rgit submodule status").cyan());
+    println!("  • {} - Check submodule status", "rgit submodule status".cyan());
     println!("  • {} - Work in the submodule", format!("cd {}", path).cyan());
     
     Ok(())

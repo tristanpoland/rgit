@@ -207,7 +207,7 @@ fn prune_remote_refs(repo: &Repository, remote_name: &str, config: &Config) -> R
     // Build set of existing remote branch names
     let mut remote_branches = std::collections::HashSet::new();
     for remote_ref in &remote_refs {
-        if let Some(name) = remote_ref.name().strip_prefix("refs/heads/") {
+        if let Some(name) = remote_ref.0.strip_prefix("refs/heads/") {
             remote_branches.insert(name.to_string());
         }
     }
@@ -244,11 +244,17 @@ fn prune_remote_refs(repo: &Repository, remote_name: &str, config: &Config) -> R
 }
 
 /// Helper to list remote refs using remote_ls
-fn remote_ls<'a>(remote: &'a mut git2::Remote) -> Result<Vec<&'a git2::RemoteHead<'a>>> {
+fn remote_ls(remote: &mut git2::Remote) -> Result<Vec<(String, git2::Oid)>> {
     remote.connect(git2::Direction::Fetch)?;
     let refs = remote.list()?;
+    
+    // Extract the data we need before disconnecting
+    let ref_data: Vec<(String, git2::Oid)> = refs.iter()
+        .map(|head| (head.name().to_string(), head.oid()))
+        .collect();
+    
     remote.disconnect()?;
-    Ok(refs.to_vec())
+    Ok(ref_data)
 }
 
 /// Show fetch summary

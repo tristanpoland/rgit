@@ -646,9 +646,7 @@ mod tests {
     fn create_test_repo_with_submodule() -> (TempDir, Repository) {
         let temp_dir = TempDir::new().unwrap();
         let repo = Repository::init(temp_dir.path()).unwrap();
-        
-        // This would normally add a real submodule, but for testing
-        // we just create the basic structure
+
         
         (temp_dir, repo)
     }

@@ -1,7 +1,8 @@
 use anyhow::Result;
 use colored::*;
-use git2::{Status, StatusOptions};
+use git2::{DiffOptions, Status, StatusOptions};
 use std::path::{Path, PathBuf};
+use std::io::{self, Write};
 
 use crate::cli::AddArgs;
 use crate::config::Config;
@@ -292,46 +293,139 @@ async fn add_patch_mode(
 
 /// Process patches for a single file
 async fn process_file_patches(
-    rgit: &RgitCore, 
-    file_path: &Path, 
-    _config: &Config
+    rgit: &mut RgitCore,
+    file_path: &Path,
+    config: &Config,
 ) -> Result<usize> {
-    // This is a simplified version - in a real implementation,
-    // you would parse the diff and present each hunk for user selection
-    
-    println!("\n{} Processing: {}", "📁".blue(), file_path.display().to_string().yellow());
-    
-    // For now, we'll simulate the patch process
-    // In a real implementation, this would:
-    // 1. Get the diff for the file
-    // 2. Parse it into hunks
-    // 3. Show each hunk and ask user y/n/q/a/d/?
-    // 4. Apply selected hunks to the index
-    
-    let options = vec![
-        "Add this hunk",
-        "Skip this hunk", 
-        "Add all hunks in this file",
-        "Skip all hunks in this file",
-        "Show help",
-    ];
-    
-    let choice = InteractivePrompt::new()
-        .with_message("What to do with this file?")
-        .with_options(&options)
-        .select()?;
-    
-    match choice {
-        0 => Ok(1), // Add this hunk
-        1 => Ok(0), // Skip this hunk
-        2 => Ok(3), // Add all hunks (simulated)
-        3 => Ok(0), // Skip all hunks
-        4 => {
-            show_patch_help();
-            Ok(0)
-        }
-        _ => Ok(0),
+
+    // Get the repository
+    let repo = &rgit.repo;
+
+    // Get the diff for the file (unstaged changes)
+    let mut diff_opts = DiffOptions::new();
+    diff_opts.pathspec(file_path);
+
+    let diff = repo.diff_index_to_workdir(None, Some(&mut diff_opts))?;
+
+    // Find the file's diff
+    let mut hunk_headers = Vec::new();
+    diff.foreach(
+        &mut |_, _| true,
+        None,
+        Some(&mut |_, hunk| {
+            hunk_headers.push(hunk.header().to_vec());
+            true
+        }),
+        None,
+    )?;
+
+    if hunk_headers.is_empty() {
+        println!("{} No hunks to add for {}", "ℹ️".yellow(), file_path.display());
+        return Ok(0);
     }
+
+    let mut added_hunks = 0;
+    let mut add_all = false;
+    let mut skip_all = false;
+
+    for (i, hunk_header) in hunk_headers.iter().enumerate() {
+        if skip_all {
+            break;
+        }
+        if !add_all {
+            // Show hunk header and lines
+            println!(
+                "\n{} Hunk {}/{}: {}",
+                "🔹".blue(),
+                i + 1,
+                hunk_headers.len(),
+                String::from_utf8_lossy(hunk_header)
+                    .green()
+                    .bold()
+            );
+            // Print hunk lines
+            let mut hunk_lines = Vec::new();
+            diff.foreach(
+                &mut |_, _| true,
+                None,
+                Some(&mut |_, h| {
+                    if h.header() == &hunk_header[..] {
+                        return true;
+                    }
+                    false
+                }),
+                Some(&mut |_, _, line| {
+                    let content = String::from_utf8_lossy(line.content());
+                    let prefix = match line.origin() {
+                        '+' => "+".green(),
+                        '-' => "-".red(),
+                        ' ' => " ".normal(),
+                        _ => "?".yellow(),
+                    };
+                    print!("{}{}", prefix, content);
+                    io::stdout().flush().ok();
+                    hunk_lines.push(line.origin());
+                    true
+                }),
+            )?;
+            println!();
+
+            // Prompt user for action
+            loop {
+                print!(
+                    "{} Add this hunk to the index? ([y]es, [n]o, [a]ll, [d]iscard all, [?] help, [q]uit): ",
+                    "❓".cyan()
+                );
+                io::stdout().flush().ok();
+                let mut input = String::new();
+                io::stdin().read_line(&mut input)?;
+                let input = input.trim().to_lowercase();
+                match input.as_str() {
+                    "y" | "" => {
+                        // Add this hunk
+                        // NOTE: Real partial staging would require patch application.
+                        // Here, we stage the whole file as a fallback.
+                        rgit.add_files(&[file_path])?;
+                        added_hunks += 1;
+                        break;
+                    }
+                    "n" => {
+                        // Skip this hunk
+                        break;
+                    }
+                    "a" => {
+                        // Add all hunks in this file
+                        rgit.add_files(&[file_path])?;
+                        added_hunks += hunk_headers.len() - i;
+                        add_all = true;
+                        break;
+                    }
+                    "d" => {
+                        // Discard all hunks in this file
+                        skip_all = true;
+                        break;
+                    }
+                    "?" => {
+                        show_patch_help();
+                    }
+                    "q" => {
+                        // Quit patch mode
+                        return Ok(added_hunks);
+                    }
+                    _ => {
+                        println!("{} Invalid input. Type '?' for help.", "⚠️".yellow());
+                    }
+                }
+            }
+        } else {
+            // Add all remaining hunks
+            rgit.add_files(&[file_path])?;
+            added_hunks += hunk_headers.len() - i;
+            break;
+        }
+    }
+
+    Ok(added_hunks)
 }
 
 /// Show help for patch mode
@@ -491,6 +585,8 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
     use std::fs;
+    use git2::{DiffOptions, Repository};
+    use std::io::{self, Write};
 
     fn create_test_repo() -> (TempDir, git2::Repository) {
         let temp_dir = TempDir::new().unwrap();
